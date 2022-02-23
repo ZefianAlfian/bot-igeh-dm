@@ -1,6 +1,8 @@
-const { IgApiClient } = require("instagram-private-api");
+const { IgApiClient, IgCheckpointError } = require("instagram-private-api");
 const axios = require("axios");
 const { random } = require("lodash");
+const Bluebird = require("bluebird");
+const fs = require("fs");
 const ig = new IgApiClient();
 const inquirer = require("inquirer");
 
@@ -15,8 +17,6 @@ const config = {
   },
 };
 
-ig.state.generateDevice("worldofrizqi");
-// ig.state.proxyUrl = "https://98.12.195.129:443"
 const questionTools = [
   {
     type: "list",
@@ -57,55 +57,72 @@ const questionUp = (other) => [
   ...other,
 ];
 
+const loginNsave = async () =>
+  new Promise(async (resolve, reject) => {
+    Bluebird.try(async () => {
+      const { username, password } = await inquirer.prompt(questionUp([]));
+      ig.state.generateDevice(username);
+      const auth = await ig.account.login(username, password);
+      const cookieJar = await ig.state.serializeCookieJar();
+      fs.writeFileSync(
+        "./savedCookie.json",
+        JSON.stringify(cookieJar),
+        "utf-8"
+      );
+      let device = (({ deviceString, deviceId, uuid, adid, build }) => ({
+        deviceString,
+        deviceId,
+        uuid,
+        adid,
+        build,
+      }))(ig.state);
+      fs.writeFileSync("./savedDevice.json", JSON.stringify(device), "utf-8");
+      resolve(ig);
+    }).catch(IgCheckpointError, async () => {
+      console.log(ig.state.checkpoint); // Checkpoint info here
+      await ig.challenge.auto(true); // Requesting sms-code or click "It was me" button
+      console.log(ig.state.checkpoint); // Challenge info here
+      const { username, password, code } = await inquirer.prompt(
+        questionUp([
+          {
+            type: "input",
+            name: "code",
+            message: "Enter code",
+          },
+        ])
+      );
+      await ig.challenge.sendSecurityCode(code);
+      await ig.account.login(username, password);
+      resolve(ig);
+    });
+  });
+
 const getAllTargetFollowing = async (
   username,
+  igh,
   list = "followings",
   after = null
 ) => {
-  const cookie =
-    'csrftoken=8B8zUE6Cxm4YZUtwNMVb1auW3viDRHzx; ds_user_id=10888503271; ig_did=5B9F3B4E-EC50-458F-BB43-DB1BB28180ED; ig_direct_region_hint="PRN\05410888503271\0541675058483:01f74ca563cb19a1529e3a3a0b4fc1d466d87fabbbe5010148d1a47ab69225354f8b283d"; ig_nrcb=1; mid=YfJuOwABAAEFbsjOmWSUvsaowiIQ; rur="EAG\05410888503271\0541675165777:01f7a0ecdd50934acba52ea91fe250ad2a4675502867939ed34d9c68cba737e206c75f51"; sessionid=10888503271:I4vw05umx2SwG0:13; shbid="18561\05410888503271\0541675141750:01f7967076dd06343375870fd403173c04c39b5579e97735bcbed79949451e49d3f9e123"; shbts="1643605750\05410888503271\0541675141750:01f7884f6c5ff93de6f6c22a1c2d3a4d1c4902027de990e976989c15c4e63c8214f0d219"';
+  const cookie = `csrftoken=${
+    (await igh.state.serializeCookieJar()).cookies[0].value
+  }; sessionid=${
+    (await igh.state.serializeCookieJar()).cookies[4].value
+  }; mid=${(await igh.state.serializeCookieJar()).cookies[1].value}`;
+
   const cnfg = {
-    jar: ig.state.cookieJar,
     headers: {
       cookie,
-      "User-Agent": ig.state.appUserAgent,
-      "X-Ads-Opt-Out": ig.state.adsOptOut ? "1" : "0",
-      "X-DEVICE-ID": ig.state.uuid,
-      "X-CM-Bandwidth-KBPS": "-1.000",
-      "X-CM-Latency": "-1.000",
-      "X-IG-App-Locale": ig.state.language,
-      "X-IG-Device-Locale": ig.state.language,
-      "X-Pigeon-Session-Id": ig.state.pigeonSessionId,
-      "X-Pigeon-Rawclienttime": (Date.now() / 1000).toFixed(3),
-      "X-IG-Connection-Speed": `${random(1000, 3700)}kbps`,
-      "X-IG-Bandwidth-Speed-KBPS": "-1.000",
-      "X-IG-Bandwidth-TotalBytes-B": "0",
-      "X-IG-Bandwidth-TotalTime-MS": "0",
-      "X-IG-Extended-CDN-Thumbnail-Cache-Busting-Value":
-        ig.state.thumbnailCacheBustingValue.toString(),
-      "X-Bloks-Version-Id": ig.state.bloksVersionId,
-      "X-MID": ig.state.extractCookie("mid")?.value,
-      "X-IG-WWW-Claim": ig.state.igWWWClaim || "0",
-      "X-Bloks-Is-Layout-RTL": ig.state.isLayoutRTL.toString(),
-      "X-IG-Connection-Type": ig.state.connectionTypeHeader,
-      "X-IG-Capabilities": ig.state.capabilitiesHeader,
-      "X-IG-App-ID": ig.state.fbAnalyticsApplicationId,
-      "X-IG-Device-ID": ig.state.uuid,
-      "X-IG-Android-ID": ig.state.deviceId,
-      "Accept-Language": ig.state.language.replace("_", "-"),
-      "X-FB-HTTP-Engine": "Liger",
+      "User-Agent": igh.state.webUserAgent,
     },
   };
-  // const src = await axios.get(`https://www.instagram.com/${username}/?__a=1`, {headers:{"User-Agent":"Mozilla/5.0 (Linux; Android 11; RMX3201) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.82 Mobile Safari/537.36", cookie: cookie}});
   const src = await axios.get(`https://www.instagram.com/${username}/?__a=1`, {
     ...cnfg,
   });
-  // const a = S(src.data).between('<script type="text/javascript">window._sharedData = ', ';</script>');
   const result = [];
   let id = src.data.graphql.user.id;
   const res = await axios.get(
     `https://www.instagram.com/graphql/query/?query_hash=${
-      config[list].hash
+      config.followings.hash
     }&variables=${encodeURIComponent(
       JSON.stringify({
         id: id,
@@ -122,14 +139,13 @@ const getAllTargetFollowing = async (
   if (res.data.data.user[config[list].path].page_info.has_next_page) {
     let nPage = await getAllTargetFollowing(
       username,
+      igh,
       list,
       res.data.data.user[config[list].path].page_info.end_cursor
     );
     result.push(...nPage);
-    // console.log(nPage)
   }
   return result;
-  // console.log(res.data.data.user)
 };
 
 const getAllItemsFromFeed = async (feed) => {
@@ -142,11 +158,7 @@ const getAllItemsFromFeed = async (feed) => {
 
 // end func
 
-const unfollNotFollback = async (ig, username, password) => {
-  await ig.simulate.preLoginFlow();
-  const acc = await ig.account.login(username, password);
-  process.nextTick(async () => await ig.simulate.postLoginFlow());
-
+const unfollNotFollback = async (ig) => {
   const followersFeed = ig.feed.accountFollowers(ig.state.cookieUserId);
   const followingFeed = ig.feed.accountFollowing(ig.state.cookieUserId);
 
@@ -168,18 +180,17 @@ const unfollNotFollback = async (ig, username, password) => {
 
 // unfollNotFollback(ig)
 
-const followByTargetFollowing = async (ig, username, password, target) => {
-  await ig.simulate.preLoginFlow();
-  const acc = await ig.account.login(username, password);
-  process.nextTick(async () => await ig.simulate.preLoginFlow());
-
+const followByTargetFollowing = async (ig, target) => {
+  const username = (await ig.account.currentUser()).username;
   const followingFeed = ig.feed.accountFollowing(ig.state.cookieUserId);
-  const ToFollow = await getAllTargetFollowing(target);
+  const ToFollow = await getAllTargetFollowing(target, ig);
   const Ufollowing = await getAllItemsFromFeed(followingFeed);
-
   const UfolUID = new Set(Ufollowing.map(({ username }) => username));
   const toFollowing = ToFollow.filter(
-    ({ node }) => !UfolUID.has(node.username) && !node.requested_by_viewer
+    ({ node }) =>
+      !UfolUID.has(node.username) &&
+      !node.requested_by_viewer &&
+      node.username !== username
   );
   console.log(`Total follow : ${toFollowing.length}`);
   for (const user of toFollowing) {
@@ -192,31 +203,79 @@ const followByTargetFollowing = async (ig, username, password, target) => {
 
 // followByTargetFollowing(ig);
 
+const getSessionIg = async () =>
+  new Promise(async (resolve, reject) => {
+    if (
+      fs.existsSync("./savedCookie.json") &&
+      fs.existsSync("./savedDevice.json")
+    ) {
+      const { restoreSession } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "restoreSession",
+          message: "Found session, restore?",
+        },
+      ]);
+      if (!restoreSession) {
+        const { delSes } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "delSes",
+            message: "Delete session ?",
+          },
+        ]);
+        if (delSes) {
+          fs.unlinkSync("./savedCookie.json");
+          fs.unlinkSync("./savedDevice.json");
+          resolve(await loginNsave());
+          return;
+        } else {
+          return resolve(await loginNsave());
+        }
+      }
+      console.log("Loading device and session from disk...");
+      let savedCookie = fs.readFileSync("./savedCookie.json", "utf-8");
+      let savedDevice = JSON.parse(
+        fs.readFileSync("./savedDevice.json"),
+        "utf-8"
+      );
+      await ig.state.deserializeCookieJar(savedCookie);
+      ig.state.deviceString = savedDevice.deviceString;
+      ig.state.deviceId = savedDevice.deviceId;
+      ig.state.uuid = savedDevice.uuid;
+      ig.state.adid = savedDevice.adid;
+      ig.state.build = savedDevice.build;
+      resolve(ig);
+    } else {
+      resolve(await loginNsave());
+    }
+  });
+
 const start = async () => {
   try {
     const choise = (await inquirer.prompt(questionTools)).tools;
 
     switch (choise) {
       case "[1] Unfollow not follback":
-        var { username, password } = await inquirer.prompt(questionUp([]));
-        await unfollNotFollback(ig, username, password);
+        var ses = await getSessionIg();
+        await unfollNotFollback(ses);
         console.log("Selesai");
         break;
       case "[2] Follow by target following":
-        var { username, password, tfollow } = await inquirer.prompt(
-          questionUp([
-            {
-              type: "input",
-              name: "tfollow",
-              message: "[>] Insert target Username to follow the followed :",
-              validate: function (value) {
-                if (!value) return "Can't Empty";
-                return true;
-              },
+        var ses = await getSessionIg();
+        let { tfollow } = await inquirer.prompt([
+          {
+            type: "input",
+            name: "tfollow",
+            message: "[>] Insert target Username to follow the followed :",
+            validate: function (value) {
+              if (!value) return "Can't Empty";
+              return true;
             },
-          ])
-        );
-        followByTargetFollowing(ig, username, password, tfollow);
+          },
+        ]);
+        await followByTargetFollowing(ses, tfollow);
+        console.log("Selesai");
         break;
       default:
         console.log(
@@ -224,7 +283,7 @@ const start = async () => {
         );
     }
   } catch (err) {
-    console.log(err.message);
+    console.log(err);
   }
 };
 
