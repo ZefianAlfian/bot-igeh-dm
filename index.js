@@ -25,6 +25,7 @@ const questionTools = [
     choices: [
       "[1] Unfollow not follback",
       "[2] Follow by target following",
+      "[3] Up Follower",
       {
         name: "Contact support",
         disabled: "Unavailable at this time",
@@ -196,12 +197,30 @@ const followByTargetFollowing = async (ig, target) => {
   for (const user of toFollowing) {
     await ig.friendship.create(user.node.id);
     console.log(`followed ${user.node.username}`);
-    const time = Math.round(Math.random() * 6000) + 4000;
+    const time = Math.round(Math.random() * 6000) + 5000;
     await new Promise((resolve) => setTimeout(resolve, time));
   }
 };
 
 // followByTargetFollowing(ig);
+
+const upFollower = async (ig) => {
+  const toFollownUnfoll = await getAllTargetFollowing("syacel.__", ig);
+  const time = Math.round(Math.random() * 6000) + 5000;
+  for (const user of toFollownUnfoll) {
+    await ig.friendship.create(user.node.id);
+    console.log(`followed ${user.node.username}`);
+    await new Promise((resolve) => setTimeout(resolve, time));
+  }
+  Bluebird.delay(36000000);
+  for (const user of toFollownUnfoll) {
+    await ig.friendship.destroy(user.node.id);
+    console.log(`unfollowed ${user.node.username}`);
+    await new Promise((resolve) => setTimeout(resolve, time));
+  }
+  Bluebird.delay(time);
+  upFollower(ig);
+};
 
 const getSessionIg = async () =>
   new Promise(async (resolve, reject) => {
@@ -275,6 +294,11 @@ const start = async () => {
           },
         ]);
         await followByTargetFollowing(ses, tfollow);
+        console.log("Selesai");
+        break;
+      case "[3] Up Follower":
+        var ses = await getSessionIg();
+        await upFollower(ses);
         console.log("Selesai");
         break;
       default:
