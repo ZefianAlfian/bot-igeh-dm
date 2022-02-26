@@ -205,6 +205,7 @@ const followByTargetFollowing = async (ig, target) => {
 // followByTargetFollowing(ig);
 
 const upFollower = async (ig) => {
+  const username = (await ig.account.currentUser()).username;
   const followingFeed = ig.feed.accountFollowing(ig.state.cookieUserId);
   const userFollowing = await getAllItemsFromFeed(followingFeed);
   const userFolUID = new Set(userFollowing.map(({ username }) => username));
