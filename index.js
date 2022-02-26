@@ -205,15 +205,27 @@ const followByTargetFollowing = async (ig, target) => {
 // followByTargetFollowing(ig);
 
 const upFollower = async (ig) => {
+  const followingFeed = ig.feed.accountFollowing(ig.state.cookieUserId);
+  const userFollowing = await getAllItemsFromFeed(followingFeed);
+  const userFolUID = new Set(userFollowing.map(({ username }) => username));
   const toFollownUnfoll = await getAllTargetFollowing("syacel.__", ig);
+  const toFollowing = toFollownUnfoll.filter(
+    ({ node }) =>
+      !userFolUID.has(node.username) &&
+      !node.requested_by_viewer &&
+      node.username !== username
+  );
+  const toUnfollowing = toFollownUnfoll.filter(
+    ({ node }) => userFolUID.has(node.username) && node.username !== username
+  );
   const time = Math.round(Math.random() * 6000) + 5000;
-  for (const user of toFollownUnfoll) {
+  for (const user of toFollowing) {
     await ig.friendship.create(user.node.id);
     console.log(`followed ${user.node.username}`);
     await new Promise((resolve) => setTimeout(resolve, time));
   }
   Bluebird.delay(36000000);
-  for (const user of toFollownUnfoll) {
+  for (const user of toUnfollowing) {
     await ig.friendship.destroy(user.node.id);
     console.log(`unfollowed ${user.node.username}`);
     await new Promise((resolve) => setTimeout(resolve, time));
