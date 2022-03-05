@@ -9,8 +9,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@discordjs/collection": "^0.4.0",
     "axios": "^0.25.0",
+    "didyoumean": "^1.2.2",
     "inquirer": "^8.2.0",
+    "instagram_mqtt": "^1.2.2",
     "instagram-private-api": "^1.45.2"
   }
 }
