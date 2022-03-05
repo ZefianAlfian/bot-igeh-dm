@@ -1,1 +1,1 @@
-Thanks to https://github.com/ikiganteng/bot-igeh
+Bot instagram mirip bot whatsapp
