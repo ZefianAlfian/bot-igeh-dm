@@ -11,9 +11,12 @@
   "dependencies": {
     "@discordjs/collection": "^0.4.0",
     "axios": "^0.25.0",
+    "cheerio": "^1.0.0-rc.10",
     "didyoumean": "^1.2.2",
     "inquirer": "^8.2.0",
+    "instagram-id-to-url-segment": "0.0.0",
+    "instagram-private-api": "^1.45.2",
     "instagram_mqtt": "^1.2.2",
-    "instagram-private-api": "^1.45.2"
+    "node-fetch": "^2.6.1"
   }
 }
