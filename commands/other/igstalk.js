@@ -8,7 +8,7 @@ module.exports = {
     	conn.sendDM(m.sender.pk, "User private");
     	return;
     }
-    // console.log(acc)
+    console.log(acc)
     conn.sendDM(m.sender.pk, `Username: ${acc.username}\nFull Name: ${acc.full_name}`)
   },
 };
